@@ -1,0 +1,76 @@
+require('dotenv').config()
+const express = require('express')
+const cors = require('cors')
+const { connectToMongo } = require('./utils/mongo')
+const Person = require('./models/person')
+
+const app = express()
+app.use(cors())
+app.use(express.json())
+
+// connect to MongoDB (single place)
+connectToMongo()
+
+// GET all persons (fetch from DB)
+app.get('/api/persons', async (req, res, next) => {
+  try {
+    const persons = await Person.find({})
+    res.json(persons)
+  } catch (error) {
+    next(error)
+  }
+})
+
+// GET single person
+app.get('/api/persons/:id', async (req, res, next) => {
+  try {
+    const person = await Person.findById(req.params.id)
+    if (person) res.json(person)
+    else res.status(404).end()
+  } catch (error) {
+    next(error)
+  }
+})
+
+// POST new person
+app.post('/api/persons', async (req, res, next) => {
+  try {
+    const { name, number } = req.body
+    if (!name || !number) return res.status(400).json({ error: 'name or number missing' })
+
+    const existing = await Person.findOne({ name })
+    if (existing) return res.status(400).json({ error: 'name must be unique' })
+
+    const person = new Person({ name, number })
+    const saved = await person.save()
+    res.json(saved)
+  } catch (error) {
+    next(error)
+  }
+})
+
+// DELETE person
+app.delete('/api/persons/:id', async (req, res, next) => {
+  try {
+    await Person.findByIdAndRemove(req.params.id)
+    res.status(204).end()
+  } catch (error) {
+    next(error)
+  }
+})
+
+// error handler
+app.use((error, req, res, next) => {
+  console.error(error.message)
+  if (error.name === 'CastError') {
+    return res.status(400).send({ error: 'malformatted id' })
+  } else if (error.name === 'ValidationError') {
+    return res.status(400).json({ error: error.message })
+  }
+  next(error)
+})
+
+const PORT = process.env.PORT || 3001
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
+})
